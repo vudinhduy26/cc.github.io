@@ -949,6 +949,30 @@ function init() {
   document.querySelector('.loading-init').remove();
   appNodes.stageContainer.classList.remove('remove');
 
+  const soundBtn = document.querySelector('.sound-btn');
+  const soundIcon = soundBtn.querySelector('svg use');
+  const backgroundMusic = document.getElementById('backgroundMusic');
+  let isPlaying = false;
+
+  soundBtn.addEventListener('click', () => {
+    if (isPlaying) {
+      backgroundMusic.pause();
+      soundIcon.setAttribute('href', '#icon-sound-off');
+      isPlaying = false;
+    } else {
+      backgroundMusic.play()
+        .then(() => {
+          soundIcon.setAttribute('href', '#icon-sound-on');
+          isPlaying = true;
+        })
+        .catch(error => {
+          console.log("Lỗi khi phát nhạc: ", error);
+        });
+    }
+  });
+
+  backgroundMusic.volume = 0.5;
+
   // Populate dropdowns
   function setOptionsForSelect(node, options) {
     node.innerHTML = options.reduce((acc, opt) => acc += `<option value="${opt.value}">${opt.label}</option>`, '');
@@ -2211,7 +2235,7 @@ class Shell {
         canvas.height = fontSize;
         ctx.font = `${fontSize}px Arial`;
         ctx.fillStyle = this.color;
-        ctx.fillText('Giúp em xua tan mệt mỏi :3', 0, fontSize);
+        ctx.fillText('Anh luôn luôn bên em hihi', 0, fontSize);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         const particles = [];
         for (let py = 0; py < canvas.height; py++) {
