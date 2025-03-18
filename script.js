@@ -1806,6 +1806,34 @@ function crackleEffect(star) {
   });
 }
 
+function createTextShape(text, fontSize, color, x, y) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.font = `${fontSize}px Arial`;
+  const textWidth = ctx.measureText(text).width;
+  canvas.width = textWidth;
+  canvas.height = fontSize;
+  ctx.font = `${fontSize}px Arial`;
+  ctx.fillStyle = color;
+  ctx.fillText(text, 0, fontSize);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  const particles = [];
+  const step = 2; // Lấy mẫu mỗi 2 pixel (có thể tăng lên 3, 4 để giảm thêm)
+
+  for (let py = 0; py < canvas.height; py += step) {
+    for (let px = 0; px < canvas.width; px += step) {
+      const index = (py * canvas.width + px) * 4;
+      const alpha = imageData[index + 3];
+      if (alpha > 128) {
+        particles.push({ x: x + px, y: y + py, color });
+      }
+    }
+  }
+
+  return particles;
+}
+
 function createFireworksTextShape(text, fontSize, color, x, y) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
@@ -1927,31 +1955,31 @@ class Shell {
   }
 
   burst(x, y) {
-    // Set burst speed so overall burst grows to set size. This specific formula was derived from testing, and is affected by simulated air drag.
-    const speed = this.spreadSize / 96;
-
+    const speed = this.spreadSize / 96; // Tốc độ gốc cho burst pháo hoa
+  
     let color, onDeath, sparkFreq, sparkSpeed, sparkLife;
     let sparkLifeVariation = 0.25;
-    // Some death effects, like crackle, play a sound, but should only be played once.
     let playedDeathSound = false;
-
+  
+    // Logic hiệu ứng death
     if (this.crossette) onDeath = (star) => {
       if (!playedDeathSound) {
         soundManager.playSound('crackleSmall');
         playedDeathSound = true;
       }
       crossetteEffect(star);
-    }
+    };
     if (this.crackle) onDeath = (star) => {
       if (!playedDeathSound) {
         soundManager.playSound('crackle');
         playedDeathSound = true;
       }
       crackleEffect(star);
-    }
+    };
     if (this.floral) onDeath = floralEffect;
     if (this.fallingLeaves) onDeath = fallingLeavesEffect;
-
+  
+    // Logic glitter
     if (this.glitter === 'light') {
       sparkFreq = 400;
       sparkSpeed = 0.3;
@@ -1983,48 +2011,36 @@ class Shell {
       sparkLife = 1400;
       sparkLifeVariation = 3.8;
     }
-
-    // Apply quality to spark count
     sparkFreq = sparkFreq / quality;
-
-    // Star factory for primary burst, pistils, and streamers.
+  
+    // Star factory cho burst pháo hoa
     let firstStar = true;
     const starFactory = (angle, speedMult) => {
-      // For non-horsetail shells, compute an initial vertical speed to add to star burst.
-      // The magic number comes from testing what looks best. The ideal is that all shell
-      // bursts appear visually centered for the majority of the star life (excl. willows etc.)
       const standardInitialSpeed = this.spreadSize / 1800;
-
       const star = Star.add(
         x,
         y,
         color || randomColor(),
         angle,
         speedMult * speed,
-        // add minor variation to star life
         this.starLife + Math.random() * this.starLife * this.starLifeVariation,
         this.horsetail ? this.comet && this.comet.speedX : 0,
         this.horsetail ? this.comet && this.comet.speedY : -standardInitialSpeed
       );
-
+  
       if (this.secondColor) {
         star.transitionTime = this.starLife * (Math.random() * 0.05 + 0.32);
         star.secondColor = this.secondColor;
       }
-
       if (this.strobe) {
         star.transitionTime = this.starLife * (Math.random() * 0.08 + 0.46);
         star.strobe = true;
-        // How many milliseconds between switch of strobe state "tick". Note that the strobe pattern
-        // is on:off:off, so this is the "on" duration, while the "off" duration is twice as long.
         star.strobeFreq = Math.random() * 20 + 40;
         if (this.strobeColor) {
           star.secondColor = this.strobeColor;
         }
       }
-
       star.onDeath = onDeath;
-
       if (this.glitter) {
         star.sparkFreq = sparkFreq;
         star.sparkSpeed = sparkSpeed;
@@ -2034,25 +2050,20 @@ class Shell {
         star.sparkTimer = Math.random() * star.sparkFreq;
       }
     };
-
-
+  
     if (typeof this.color === 'string') {
       if (this.color === 'random') {
-        color = null; // falsey value creates random color in starFactory
+        color = null; // Random color trong starFactory
       } else {
         color = this.color;
       }
-
-      // Rings have positional randomness, but are rotated randomly
+  
       if (this.ring) {
         const ringStartAngle = Math.random() * Math.PI;
-        const ringSquash = Math.pow(Math.random(), 2) * 0.85 + 0.15;;
-
+        const ringSquash = Math.pow(Math.random(), 2) * 0.85 + 0.15;
         createParticleArc(0, PI_2, this.starCount, 0, angle => {
-          // Create a ring, squashed horizontally
           const initSpeedX = Math.sin(angle) * speed * ringSquash;
           const initSpeedY = Math.cos(angle) * speed;
-          // Rotate ring
           const newSpeed = MyMath.pointDist(0, 0, initSpeedX, initSpeedY);
           const newAngle = MyMath.pointAngle(0, 0, initSpeedX, initSpeedY) + ringStartAngle;
           const star = Star.add(
@@ -2060,12 +2071,9 @@ class Shell {
             y,
             color,
             newAngle,
-            // apply near cubic falloff to speed (places more particles towards outside)
-            newSpeed, //speed,
-            // add minor variation to star life
+            newSpeed,
             this.starLife + Math.random() * this.starLife * this.starLifeVariation
           );
-
           if (this.glitter) {
             star.sparkFreq = sparkFreq;
             star.sparkSpeed = sparkSpeed;
@@ -2075,87 +2083,38 @@ class Shell {
             star.sparkTimer = Math.random() * star.sparkFreq;
           }
         });
-      } 
-      else if (this.zz) {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const fontSize = 30;
-        ctx.font = `${fontSize}px Arial`;
-        const textWidth = ctx.measureText('ĐIỆP CUTE ^^').width;
-        canvas.width = textWidth;
-        canvas.height = fontSize;
-        ctx.font = `${fontSize}px Arial`;
-        ctx.fillStyle = this.color;
-        ctx.fillText('ĐIỆP CUTE ^^', 0, fontSize);
-        
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-        const particles = [];
-  
-        for (let py = 0; py < canvas.height; py++) {
-          for (let px = 0; px < canvas.width; px++) {
-            const index = (py * canvas.width + px) * 4;
-            const alpha = imageData[index + 3];
-            if (alpha > 128) { // If pixel is not transparent
-              particles.push({ x: x + px, y: y + py, color: this.color });
-            }
-          }
-        }
-  
-        particles.forEach(point => {
-          const star = Star.add(
-            point.x,
-            point.y,
-            this.color,
-            0, // No angle needed for static shape
-            speed,
-            this.starLife + Math.random() * this.starLife * this.starLifeVariation
-          );
-  
-          if (this.glitter) {
-            star.sparkFreq = sparkFreq;
-            star.sparkSpeed = sparkSpeed;
-            star.sparkLife = sparkLife;
-            star.sparkLifeVariation = sparkLifeVariation;
-            star.sparkColor = this.glitterColor;
-            star.sparkTimer = Math.random() * star.sparkFreq;
-          }
-        });
-      }
-      else if (this.tt) {
+      } else if (this.zz) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         const fontSize = 20;
         ctx.font = `${fontSize}px Arial`;
-        const textWidth = ctx.measureText('HIHI, Kiếm thật nhiều xiền').width;
+        const textWidth = ctx.measureText('Chẳng có gì có thể làm khó được Bé Như ^^').width;
         canvas.width = textWidth;
         canvas.height = fontSize;
         ctx.font = `${fontSize}px Arial`;
         ctx.fillStyle = this.color;
-        ctx.fillText('HIHI, Kiếm thật nhiều xiền', 0, fontSize);
-        
+        ctx.fillText('Chẳng có gì có thể làm khó được Bé Như ^^', 0, fontSize);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         const particles = [];
-  
         for (let py = 0; py < canvas.height; py++) {
           for (let px = 0; px < canvas.width; px++) {
             const index = (py * canvas.width + px) * 4;
             const alpha = imageData[index + 3];
-            if (alpha > 128) { // If pixel is not transparent
+            if (alpha > 128) {
               particles.push({ x: x + px, y: y + py, color: this.color });
             }
           }
         }
-  
         particles.forEach(point => {
           const star = Star.add(
             point.x,
             point.y,
             this.color,
-            0, // No angle needed for static shape
-            speed,
-            this.starLife + Math.random() * this.starLife * this.starLifeVariation
+            0, // Không lan tỏa
+            0, // Không có vận tốc để đứng yên
+            this.starLife * 2 // Tăng thời gian sống để hiển thị lâu hơn
           );
-  
+          star.isStatic = true; // Đánh dấu để không áp dụng GRAVITY trong Star.update
           if (this.glitter) {
             star.sparkFreq = sparkFreq;
             star.sparkSpeed = sparkSpeed;
@@ -2165,84 +2124,115 @@ class Shell {
             star.sparkTimer = Math.random() * star.sparkFreq;
           }
         });
-      }
-      else if (this.img) {
+      } else if (this.tt) {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const fontSize = 20;
+        ctx.font = `${fontSize}px Arial`;
+        const textWidth = ctx.measureText('Anh luôn luôn bên em hihi').width;
+        canvas.width = textWidth;
+        canvas.height = fontSize;
+        ctx.font = `${fontSize}px Arial`;
+        ctx.fillStyle = this.color;
+        ctx.fillText('Anh luôn luôn bên em hihi', 0, fontSize);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        const particles = [];
+        for (let py = 0; py < canvas.height; py++) {
+          for (let px = 0; px < canvas.width; px++) {
+            const index = (py * canvas.width + px) * 4;
+            const alpha = imageData[index + 3];
+            if (alpha > 128) {
+              particles.push({ x: x + px, y: y + py, color: this.color });
+            }
+          }
+        }
+        particles.forEach(point => {
+          const star = Star.add(
+            point.x,
+            point.y,
+            this.color,
+            0, // Không lan tỏa
+            0, // Không có vận tốc để đứng yên
+            this.starLife * 2 // Tăng thời gian sống để hiển thị lâu hơn
+          );
+          star.isStatic = true; // Đánh dấu để không áp dụng GRAVITY trong Star.update
+          if (this.glitter) {
+            star.sparkFreq = sparkFreq;
+            star.sparkSpeed = sparkSpeed;
+            star.sparkLife = sparkLife;
+            star.sparkLifeVariation = sparkLifeVariation;
+            star.sparkColor = this.glitterColor;
+            star.sparkTimer = Math.random() * star.sparkFreq;
+          }
+        });
+      } else if (this.img) {
         const imageSrc = '/1d6cbf411e41a61fff50.jpg';
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         const image = new Image();
-        image.crossOrigin = 'Anonymous'; // Yêu cầu quyền truy cập cross-origin
+        image.crossOrigin = 'Anonymous';
         image.src = imageSrc;
-      
         image.onload = () => {
           canvas.width = image.width;
           canvas.height = image.height;
           ctx.drawImage(image, 0, 0);
-      
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
           const particles = [];
-      
           for (let py = 0; py < canvas.height; py++) {
             for (let px = 0; px < canvas.width; px++) {
               const index = (py * canvas.width + px) * 4;
               const alpha = imageData[index + 3];
-              if (alpha > 128) { // If pixel is not transparent
+              if (alpha > 128) {
                 particles.push({ x: x + px, y: y + py, color: this.color });
               }
             }
           }
-      
           particles.forEach(point => {
             const star = Star.add(
               point.x,
               point.y,
               this.color,
-              0, // No angle needed for static shape
+              0,
               speed,
               this.starLife
             );
           });
         };
-      
         image.onerror = () => {
           console.error(`Failed to load image: ${imageSrc}`);
         };
-      }
-      else if (this.gg) {
+      } else if (this.gg) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         const fontSize = 20;
         ctx.font = `${fontSize}px Arial`;
-        const textWidth = ctx.measureText('XUA TAN MỆT MỎI CHO EM CHÁU').width;
+        const textWidth = ctx.measureText('Giúp em xua tan mệt mỏi :3').width;
         canvas.width = textWidth;
         canvas.height = fontSize;
         ctx.font = `${fontSize}px Arial`;
         ctx.fillStyle = this.color;
-        ctx.fillText('XUA TAN MỆT MỎI CHO EM CHÁU', 0, fontSize);
-        
+        ctx.fillText('Giúp em xua tan mệt mỏi :3', 0, fontSize);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         const particles = [];
-  
         for (let py = 0; py < canvas.height; py++) {
           for (let px = 0; px < canvas.width; px++) {
             const index = (py * canvas.width + px) * 4;
             const alpha = imageData[index + 3];
-            if (alpha > 128) { // If pixel is not transparent
+            if (alpha > 128) {
               particles.push({ x: x + px, y: y + py, color: this.color });
             }
           }
         }
-  
         particles.forEach(point => {
           const star = Star.add(
             point.x,
             point.y,
             this.color,
-            0, // No angle needed for static shape
-            speed,
-            this.starLife + Math.random() * this.starLife * this.starLifeVariation
+            0, // Không lan tỏa
+            0, // Không có vận tốc để đứng yên
+            this.starLife * 2 // Tăng thời gian sống để hiển thị lâu hơn
           );
-  
+          star.isStatic = true; // Đánh dấu để không áp dụng GRAVITY trong Star.update
           if (this.glitter) {
             star.sparkFreq = sparkFreq;
             star.sparkSpeed = sparkSpeed;
@@ -2252,30 +2242,24 @@ class Shell {
             star.sparkTimer = Math.random() * star.sparkFreq;
           }
         });
-      }
-      else if (this.heart) {
+      } else if (this.heart) {
         const heartPoints = [];
-        const numPoints = this.starCount; // Number of points to create the heart shape
+        const numPoints = this.starCount;
         for (let i = 0; i < numPoints; i++) {
           const t = (i / numPoints) * PI_2;
           const xPos = 16 * Math.sin(t) ** 3;
           const yPos = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
-          heartPoints.push({
-            x: xPos,
-            y: -yPos
-          }); // Invert y to match canvas coordinate system
+          heartPoints.push({ x: xPos, y: -yPos });
         }
-
         heartPoints.forEach(point => {
           const star = Star.add(
-            x + point.x * 10, // Scale the heart shape
+            x + point.x * 10,
             y + point.y * 10,
             this.color,
-            0, // No angle needed for static shape
+            0,
             speed,
             this.starLife + Math.random() * this.starLife * this.starLifeVariation
           );
-
           if (this.glitter) {
             star.sparkFreq = sparkFreq;
             star.sparkSpeed = sparkSpeed;
@@ -2285,10 +2269,33 @@ class Shell {
             star.sparkTimer = Math.random() * star.sparkFreq;
           }
         });
-      }
-      // Normal burst
-      else {
+      } else {
+        // Tạo burst pháo hoa thông thường
         createBurst(this.starCount, starFactory);
+  
+        // Thêm chữ "Như" ở giữa
+        const textParticles = createTextShape("BÉ NHƯ CUTE", 20, this.color, x - 30, y - 10); // Giảm fontSize để tối ưu
+        textParticles.forEach(point => {
+          const star = Star.add(
+            point.x,
+            point.y,
+            this.color,
+            0, // Không lan tỏa
+            0, // Không áp dụng speed để chữ đứng yên ban đầu
+            this.starLife * 1.5 + Math.random() * this.starLife * this.starLifeVariation // Tăng thời gian sống
+          );
+          star.airDrag = 0.99; // Làm chậm tốc độ rơi
+          star.gravity = 0.0005; // Trọng lực riêng cho chữ "Như" (nếu Star hỗ trợ)
+          if (this.glitter) {
+            star.sparkFreq = sparkFreq;
+            star.sparkSpeed = sparkSpeed;
+            star.sparkLife = sparkLife;
+            star.sparkLifeVariation = sparkLifeVariation;
+            star.sparkColor = this.glitterColor;
+            star.sparkTimer = Math.random() * star.sparkFreq;
+          }
+          star.onDeath = onDeath;
+        });
       }
     } else if (Array.isArray(this.color)) {
       if (Math.random() < 0.5) {
@@ -2296,7 +2303,6 @@ class Shell {
         const start2 = start + Math.PI;
         const arc = Math.PI;
         color = this.color[0];
-        // Not creating a full arc automatically reduces star count.
         createBurst(this.starCount, starFactory, start, arc);
         color = this.color[1];
         createBurst(this.starCount, starFactory, start2, arc);
@@ -2306,10 +2312,34 @@ class Shell {
         color = this.color[1];
         createBurst(this.starCount / 2, starFactory);
       }
+  
+      // Thêm chữ "Như" ở giữa với mảng màu
+      const textParticles = createTextShape("BÉ NHƯ CUTE", 20, this.color[0], x - 30, y - 10);
+      textParticles.forEach(point => {
+        const star = Star.add(
+          point.x,
+          point.y,
+          this.color[Math.random() < 0.5 ? 0 : 1], // Chọn ngẫu nhiên giữa 2 màu
+          0,
+          0,
+          this.starLife * 1.5 + Math.random() * this.starLife * this.starLifeVariation
+        );
+        star.airDrag = 0.99;
+        star.gravity = 0.0005; // Trọng lực riêng (nếu hỗ trợ)
+        if (this.glitter) {
+          star.sparkFreq = sparkFreq;
+          star.sparkSpeed = sparkSpeed;
+          star.sparkLife = sparkLife;
+          star.sparkLifeVariation = sparkLifeVariation;
+          star.sparkColor = this.glitterColor;
+          star.sparkTimer = Math.random() * star.sparkFreq;
+        }
+        star.onDeath = onDeath;
+      });
     } else {
       throw new Error('Invalid shell color. Expected string or array of strings, but got: ' + this.color);
     }
-
+  
     if (this.pistil) {
       const innerShell = new Shell({
         spreadSize: this.spreadSize * 0.5,
@@ -2322,7 +2352,7 @@ class Shell {
       });
       innerShell.burst(x, y);
     }
-
+  
     if (this.streamers) {
       const innerShell = new Shell({
         spreadSize: this.spreadSize * 0.9,
@@ -2334,20 +2364,10 @@ class Shell {
       });
       innerShell.burst(x, y);
     }
-
-    // Queue burst flash render
+  
     BurstFlash.add(x, y, this.spreadSize / 4);
-
-    // Create fireworks text "Duy" when the shell explodes
-    // Play sound, but only for "original" shell, the one that was launched.
-    // We don't want multiple sounds from pistil or streamer "sub-shells".
-    // This can be detected by the presence of a comet.
+  
     if (this.comet) {
-      // Scale explosion sound based on current shell size and selected (max) shell size.
-      // Shooting selected shell size will always sound the same no matter the selected size,
-      // but when smaller shells are auto-fired, they will sound smaller. It doesn't sound great
-      // when a value too small is given though, so instead of basing it on proportions, we just
-      // look at the difference in size and map it to a range known to sound good.
       const maxDiff = 2;
       const sizeDifferenceFromMaxSize = Math.min(maxDiff, shellSizeSelector() - this.shellSize);
       const soundScale = (1 - sizeDifferenceFromMaxSize / maxDiff) * 0.3 + 0.7;
